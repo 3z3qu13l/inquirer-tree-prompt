@@ -11,6 +11,7 @@ module.exports = {
         'airbnb-base'
     ],
     rules: {
+        'class-methods-use-this': 'off',
         'no-param-reassign': 'off',
         'no-empty': 'off',
         'no-underscore-dangle': 'off',

@@ -152,7 +152,7 @@ export class TreePrompt extends BasePrompt {
     }
 
     async validateAndFilterDescendants(node) {
-        for (let index = node.children.length - 1; index >= 0; index--) {
+        for (let index = node.children.length - 1; index >= 0; index--) { // eslint-disable-line no-plusplus
             const child = node.children[index];
             child.parent = node;
             await this.addValidity(child);
@@ -218,6 +218,7 @@ export class TreePrompt extends BasePrompt {
             this.shownList.push(child);
             if (!this.active) this.active = child;
 
+            // eslint-disable-next-line no-nested-ternary
             let prefix = child.children
                 ? child.open
                     ? `${figures.arrowDown} `
