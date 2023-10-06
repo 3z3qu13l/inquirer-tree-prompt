@@ -1,21 +1,18 @@
 ## Inquirer Tree Prompt
 
-Heavily based on [inquirer-file-tree-selection](https://github.com/anc95/inquirer-file-tree-selection/blob/master/index.js) by `anc95`.
+Heavily based on [inquirer-tree-prompt](https://github.com/insightfuls/inquirer-tree-prompt)
 
 ### QuickDemo
-
 ![QuickDemo](./example/screenshot.gif)
 
 ### Install
-
 ```
 npm install inquirer-tree-prompt
 ```
 
 ### Usage
-
 ```
-const TreePrompt = require('inquirer-tree-prompt');
+import { TreePrompt } from 'inquirer-tree-prompt';
 
 inquirer.registerPrompt('tree', TreePrompt);
 
@@ -26,7 +23,6 @@ inquirer.prompt({
 ```
 
 ### Options
-
 Takes `type`, `name`, `message`, `tree`, [`filter`, `validate`, `transformer`, `pageSize`, `loop`, `onlyShowValid`, `hideChildrenOfValid`, `multiple`] properties.
 
 The extra options that this plugin provides are:
@@ -47,10 +43,9 @@ The extra options that this plugin provides are:
 - `multiple`: (Boolean) if true, will enable to select multiple items. Default: false.
 
 ### Example
-
 ```
-const inquirer = require('inquirer');
-const TreePrompt = require('inquirer-tree-prompt');
+import inquirer from 'inquirer';
+import { TreePrompt } from 'inquirer-tree-prompt';
 
 inquirer.registerPrompt('tree', TreePrompt);
 
