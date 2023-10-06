@@ -336,6 +336,7 @@ export class TreePrompt extends BasePrompt {
 
     toggleSelection() {
         if (this.active.isValid !== true) return;
+        if (this.active.children?.length) return;
 
         const selectedIndex = this.selectedList.indexOf(this.active);
         if (selectedIndex === -1) {
