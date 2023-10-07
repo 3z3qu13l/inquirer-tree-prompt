@@ -27,7 +27,6 @@ export class TreePrompt extends BasePrompt {
             ...this.opt
         };
 
-        // Make sure no default is set (so it won't be printed)
         this.opt.default = null;
         this.paginator = new Paginator(this.screen, { isInfinite: this.opt.loop !== false });
         this.selectedList = [];
@@ -139,10 +138,6 @@ export class TreePrompt extends BasePrompt {
 
             node.children = _.cloneDeep(children);
         } catch (e) {
-            // if something goes wrong gathering the children, ignore it;
-            // it could be something like permission denied for a single
-            // directory in a file hierarchy
-
             node.children = null;
         }
     }
@@ -152,7 +147,7 @@ export class TreePrompt extends BasePrompt {
     }
 
     async validateAndFilterDescendants(node) {
-        for (let index = node.children.length - 1; index >= 0; index--) { // eslint-disable-line no-plusplus
+        for (let index = node.children.length - 1; index >= 0; index -= 1) {
             const child = node.children[index];
             child.parent = node;
             await this.addValidity(child);
@@ -228,17 +223,12 @@ export class TreePrompt extends BasePrompt {
                     : '  ';
 
             if (this.opt.multiple) {
-                prefix += this.selectedList.includes(child) ? figures.radioOn : figures.radioOff;
-                prefix += ' ';
+                prefix += `${this.selectedList.includes(child) ? figures.radioOn : figures.radioOff} `;
             }
 
-            const showValue = `${' '.repeat(indent) + prefix + this.nameFor(child, isFinal)}\n`;
+            const showValue = `${' '.repeat(indent)}${prefix}${this.nameFor(child, isFinal)}\n`;
             if (child === this.active) {
-                if (child.isValid === true) {
-                    output += chalk.cyan(showValue);
-                } else {
-                    output += chalk.red(showValue);
-                }
+                output += (child.isValid === true) ? chalk.cyan(showValue) : chalk.red(showValue);
             } else {
                 output += showValue;
             }
@@ -300,7 +290,6 @@ export class TreePrompt extends BasePrompt {
 
         if (!this.active.open) {
             this.active.open = true;
-
             this.prepareChildrenAndRender(this.active);
         } else if (this.active.children.length) {
             this.moveActive(1);
