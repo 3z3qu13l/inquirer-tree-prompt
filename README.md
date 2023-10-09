@@ -1,6 +1,6 @@
 ## Inquirer Tree Prompt
 
-Heavily based on [inquirer-tree-prompt](https://github.com/insightfuls/inquirer-tree-prompt)
+Code base forked from [inquirer-tree-prompt](https://github.com/insightfuls/inquirer-tree-prompt)
 
 ### QuickDemo
 ![QuickDemo](./example/screenshot.gif)
