@@ -286,7 +286,14 @@ export class TreePrompt extends BasePrompt {
     }
 
     onRightKey() {
-        if (!this.active.children) return;
+        if (!this.active.children) {
+            if (this.opt.multiple) {
+                this.toggleSelection();
+            } else {
+                this.toggleOpen();
+            }
+            return;
+        }
 
         if (!this.active.open) {
             this.active.open = true;
