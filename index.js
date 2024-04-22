@@ -137,7 +137,7 @@ export class TreePrompt extends BasePrompt {
             }
 
             node.children = _.cloneDeep(children);
-        } catch (e) {
+        } catch (e) {// eslint-disable-line no-unused-vars
             node.children = null;
         }
     }
@@ -213,7 +213,6 @@ export class TreePrompt extends BasePrompt {
             this.shownList.push(child);
             if (!this.active) this.active = child;
 
-            // eslint-disable-next-line no-nested-ternary
             let prefix = child.children
                 ? child.open
                     ? `${figures.arrowDown} `

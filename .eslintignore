@@ -1,7 +1,0 @@
-dist/
-docs/
-logs/
-coverage/
-node-modules/
-webpack.config.js
-sandbox.js
