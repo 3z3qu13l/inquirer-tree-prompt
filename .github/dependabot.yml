@@ -5,10 +5,11 @@
 
 version: 2
 updates:
-  - package-ecosystem: "npm" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  - package-ecosystem: "npm"
+    directory: "/"
     schedule:
       interval: "daily"
+      time: "07:00"
       timezone: Europe/Paris
     labels:
       - dependencies
@@ -16,6 +17,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+      time: "07:00"
       timezone: Europe/Paris
     labels:
       - actions

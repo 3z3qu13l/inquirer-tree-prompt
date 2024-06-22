@@ -28,8 +28,8 @@
     "inquirer": "^9.0.0"
   },
   "devDependencies": {
-    "eslint": "^9.1.1",
-    "globals": "^15.0.0",
-    "inquirer": "^9.2.19"
+    "eslint": "9.5.0",
+    "globals": "15.6.0",
+    "inquirer": "9.2.23"
   }
 }
