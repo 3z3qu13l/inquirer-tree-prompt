@@ -30,6 +30,6 @@
   "devDependencies": {
     "eslint": "9.6.0",
     "globals": "15.7.0",
-    "inquirer": "9.3.1"
+    "inquirer": "9.3.2"
   }
 }
