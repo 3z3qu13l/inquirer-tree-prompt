@@ -4,9 +4,9 @@ import figures from 'figures';
 import cliCursor from 'cli-cursor';
 import { fromEvent } from 'rxjs';
 import { filter, share, map, takeUntil } from 'rxjs/operators';
-import BasePrompt from 'inquirer/lib/prompts/base.js';
-import observe from 'inquirer/lib/utils/events.js';
-import Paginator from 'inquirer/lib/utils/paginator.js';
+import BasePrompt from 'inquirer/src/prompts/base.js';
+import observe from 'inquirer/src/utils/events.js';
+import Paginator from 'inquirer/src/utils/paginator.js';
 
 const _ = { cloneDeep };
 
