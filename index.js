@@ -1,8 +1,8 @@
-import chalk from 'chalk';
 import cliCursor from 'cli-cursor';
 import figures from 'figures';
 import { fromEvent } from 'rxjs';
 import { filter, share, map, takeUntil } from 'rxjs/operators';
+import colors from 'yoctocolors';
 // inquirer internals
 import BasePrompt from 'inquirer/lib/prompts/base.js';
 import observe from 'inquirer/lib/utils/events.js';
@@ -181,7 +181,7 @@ export class TreePrompt extends BasePrompt {
 
         if (this.firstRender) {
             const hint = `Use arrow keys,${this.opt.multiple ? ' space to select,' : ''} enter to confirm.`;
-            message += chalk.dim(`(${hint})`);
+            message += colors.dim(`(${hint})`);
         }
 
         if (this.status === STATUS_ANSWERED) {
@@ -192,7 +192,7 @@ export class TreePrompt extends BasePrompt {
                 answer = this.shortFor(this.active, true);
             }
 
-            message += chalk.cyan(answer);
+            message += colors.cyan(answer);
         } else {
             this.shownList = [];
             const treeContent = `${this.createTreeContent()}${this.opt.loop !== false ? '----------------' : ''}`;
@@ -201,7 +201,7 @@ export class TreePrompt extends BasePrompt {
 
         this.firstRender = false;
 
-        const bottomContent = error ? `\n${chalk.red('>> ')}${error}` : undefined;
+        const bottomContent = error ? `\n${colors.red('>> ')}${error}` : undefined;
         this.screen.render(message, bottomContent);
     }
 
@@ -228,7 +228,7 @@ export class TreePrompt extends BasePrompt {
 
             const showValue = `${' '.repeat(indent)}${prefix}${this.nameFor(child, isFinal)}\n`;
             if (child === this.active) {
-                output += (child.isValid === true) ? chalk.cyan(showValue) : chalk.red(showValue);
+                output += (child.isValid === true) ? colors.cyan(showValue) : colors.red(showValue);
             } else {
                 output += showValue;
             }
