@@ -1,14 +1,14 @@
-import cloneDeep from 'lodash/cloneDeep.js';
 import chalk from 'chalk';
-import figures from 'figures';
 import cliCursor from 'cli-cursor';
+import figures from 'figures';
 import { fromEvent } from 'rxjs';
 import { filter, share, map, takeUntil } from 'rxjs/operators';
+// inquirer internals
 import BasePrompt from 'inquirer/lib/prompts/base.js';
 import observe from 'inquirer/lib/utils/events.js';
 import Paginator from 'inquirer/lib/utils/paginator.js';
 
-const _ = { cloneDeep };
+const STATUS_ANSWERED = 'answered';
 
 export class TreePrompt extends BasePrompt {
     constructor(questions, rl, answers) {
@@ -17,7 +17,7 @@ export class TreePrompt extends BasePrompt {
         this.done = () => {};
         this.firstRender = true;
 
-        const tree = typeof this.opt.tree === 'function' ? this.opt.tree : _.cloneDeep(this.opt.tree);
+        const tree = typeof this.opt.tree === 'function' ? this.opt.tree : structuredClone(this.opt.tree);
         this.tree = { children: tree };
 
         this.shownList = [];
@@ -136,7 +136,7 @@ export class TreePrompt extends BasePrompt {
                 // would be a poor experience in this scenario.
             }
 
-            node.children = _.cloneDeep(children);
+            node.children = structuredClone(children);
         } catch (e) {// eslint-disable-line no-unused-vars
             node.children = null;
         }
@@ -167,7 +167,8 @@ export class TreePrompt extends BasePrompt {
     }
 
     async addValidity(node) {
-        if (typeof node.isValid !== 'undefined') return;
+        if (node.isValid !== undefined) return;
+
         if (this.opt.validate) {
             node.isValid = await this.opt.validate(this.valueFor(node), this.answers);
         } else {
@@ -183,7 +184,7 @@ export class TreePrompt extends BasePrompt {
             message += chalk.dim(`(${hint})`);
         }
 
-        if (this.status === 'answered') {
+        if (this.status === STATUS_ANSWERED) {
             let answer;
             if (this.opt.multiple) {
                 answer = this.selectedList.map((item) => this.shortFor(item, true)).join(', ');
@@ -207,7 +208,7 @@ export class TreePrompt extends BasePrompt {
     createTreeContent(node = this.tree, indent = 2) {
         const children = node.children || [];
         let output = '';
-        const isFinal = this.status === 'answered';
+        const isFinal = this.status === STATUS_ANSWERED;
 
         children.forEach((child) => {
             this.shownList.push(child);
@@ -241,17 +242,19 @@ export class TreePrompt extends BasePrompt {
     }
 
     shortFor(node, isFinal = false) {
-        return typeof node.short !== 'undefined' ? node.short : this.nameFor(node, isFinal);
+        return node.short !== undefined ? node.short : this.nameFor(node, isFinal);
     }
 
     nameFor(node, isFinal = false) {
-        if (typeof node.name !== 'undefined') return node.name;
+        if (node.name !== undefined) return node.name;
+
         if (this.opt.transformer) return this.opt.transformer(node.value, this.answers, { isFinal });
+
         return node.value;
     }
 
     valueFor(node) {
-        return typeof node.value !== 'undefined' ? node.value : node.name;
+        return node.value !== undefined ? node.value : node.name;
     }
 
     onError(state) {
@@ -259,7 +262,7 @@ export class TreePrompt extends BasePrompt {
     }
 
     onSubmit(state) {
-        this.status = 'answered';
+        this.status = STATUS_ANSWERED;
         this.render();
         this.screen.done();
         cliCursor.show();
@@ -308,9 +311,11 @@ export class TreePrompt extends BasePrompt {
 
         if (index >= this.shownList.length) {
             if (this.opt.loop === false) return;
+
             index = 0;
         } else if (index < 0) {
             if (this.opt.loop === false) return;
+
             index = this.shownList.length - 1;
         }
 
