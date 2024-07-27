@@ -18,7 +18,7 @@
   "main": "index.js",
   "license": "ISC",
   "dependencies": {
-    "cli-cursor": "4.0.0",
+    "cli-cursor": "5.0.0",
     "figures": "6.1.0",
     "rxjs": "7.8.1",
     "yoctocolors": "2.1.1"
