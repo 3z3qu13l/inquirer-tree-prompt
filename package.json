@@ -24,11 +24,11 @@
     "yoctocolors": "2.1.1"
   },
   "peerDependencies": {
-    "inquirer": "^9.3.6"
+    "inquirer": "^9.3.0"
   },
   "devDependencies": {
     "eslint": "9.23.0",
     "globals": "16.0.0",
-    "inquirer": "9.3.6"
+    "inquirer": "9.3.7"
   }
 }
