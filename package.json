@@ -21,7 +21,7 @@
     "cli-cursor": "5.0.0",
     "figures": "6.1.0",
     "rxjs": "7.8.2",
-    "yoctocolors": "2.1.1"
+    "yoctocolors": "2.1.2"
   },
   "peerDependencies": {
     "inquirer": "^9.3.0"
