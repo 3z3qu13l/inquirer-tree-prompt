@@ -29,6 +29,6 @@
   "devDependencies": {
     "eslint": "9.34.0",
     "globals": "16.4.0",
-    "inquirer": "9.3.7"
+    "inquirer": "9.3.8"
   }
 }
