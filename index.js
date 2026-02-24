@@ -1,365 +1,304 @@
-import cliCursor from 'cli-cursor';
+import { createPrompt, useState, useKeypress, usePagination, usePrefix, useRef, isEnterKey, isUpKey, isDownKey, isSpaceKey } from '@inquirer/core';
 import figures from 'figures';
-import { fromEvent } from 'rxjs';
-import { filter, share, map, takeUntil } from 'rxjs/operators';
 import colors from 'yoctocolors';
-// inquirer internals
-import BasePrompt from 'inquirer/lib/prompts/base.js';
-import observe from 'inquirer/lib/utils/events.js';
-import Paginator from 'inquirer/lib/utils/paginator.js';
 
-const STATUS_ANSWERED = 'answered';
+function valueFor(node) {
+    return node.value !== undefined ? node.value : node.name;
+}
 
-export class TreePrompt extends BasePrompt {
-    constructor(questions, rl, answers) {
-        super(questions, rl, answers);
+function shortFor(node) {
+    if (node.short !== undefined) return node.short;
+    if (node.name !== undefined) return node.name;
+    return node.value;
+}
 
-        this.done = () => {};
-        this.firstRender = true;
+function nameFor(node, config) {
+    if (node.name !== undefined) return node.name;
+    if (config?.transformer) return config.transformer(node.value, {}, { isFinal: false });
+    return node.value;
+}
 
-        const tree = typeof this.opt.tree === 'function' ? this.opt.tree : structuredClone(this.opt.tree);
-        this.tree = { children: tree };
+// Synchronous tree preparation (handles static trees)
+function prepareNode(node, config) {
+    if (node.prepared) return;
+    node.prepared = true;
 
-        this.shownList = [];
-        this.opt = {
-            pageSize: 10,
-            multiple: false,
-            ...this.opt
-        };
+    if (typeof node.children === 'function') return;
+    if (!node.children) return;
 
-        this.opt.default = null;
-        this.paginator = new Paginator(this.screen, { isInfinite: this.opt.loop !== false });
-        this.selectedList = [];
-    }
+    node.children = node.children.map((item) => (typeof item !== 'object' ? { value: item } : item));
 
-    async _run(done) {
-        this.done = done;
-        this._installKeyHandlers();
-        cliCursor.hide();
-        await this.prepareChildrenAndRender(this.tree);
+    for (let i = node.children.length - 1; i >= 0; i--) {
+        const child = node.children[i];
+        child.parent = node;
 
-        // TODO: exit early somehow if no items
-        // TODO: what about if there are no valid items?
-        return this;
-    }
-
-    _installKeyHandlers() {
-        const events = observe(this.rl);
-
-        const getvalue = () => {
-            const value = this.opt.multiple ? this.selectedList[0] : this.active;
-            if (value) this.valueFor(value);
-            return value;
-        };
-
-        const validation = this.handleSubmitEvents(
-            events.line.pipe(map(getvalue))
-        );
-        validation.success.forEach(this.onSubmit.bind(this));
-        validation.error.forEach(this.onError.bind(this));
-
-        events.normalizedUpKey
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onUpKey.bind(this));
-
-        events.normalizedDownKey
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onDownKey.bind(this));
-
-        events.keypress
-            .pipe(
-                filter(({ key }) => key.name === 'right'),
-                share()
-            )
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onRightKey.bind(this));
-
-        events.keypress
-            .pipe(
-                filter(({ key }) => key.name === 'left'),
-                share()
-            )
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onLeftKey.bind(this));
-
-        events.spaceKey
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onSpaceKey.bind(this));
-
-        function normalizeKeypressEvents(value, key) {
-            return { value, key: key || {} };
+        if (child.isValid === undefined) {
+            child.isValid = config?.validate ? undefined : true;
         }
 
-        fromEvent(this.rl.input, 'keypress', normalizeKeypressEvents)
-            .pipe(filter(({ key }) => key && key.name === 'tab'), share())
-            .pipe(takeUntil(validation.success))
-            .forEach(this.onTabKey.bind(this));
+        if (config?.hideChildrenOfValid && child.isValid === true) {
+            child.children = null;
+        }
+        if (config?.onlyShowValid && child.isValid !== true && !child.children) {
+            node.children.splice(i, 1);
+            continue;
+        }
+
+        if (child.open) {
+            prepareNode(child, config);
+        }
     }
+}
 
-    async prepareChildrenAndRender(node) {
-        await this.prepareChildren(node);
-        this.render();
-    }
+// Async tree preparation (for function children and async validate)
+async function prepareNodeAsync(node, config) {
+    if (node.prepared) return;
+    node.prepared = true;
 
-    async prepareChildren(node) {
-        if (node.prepared) return;
-
-        node.prepared = true;
-        await this.runChildrenFunctionIfRequired(node);
-        if (!node.children) return;
-
-        this.cloneAndNormaliseChildren(node);
-        await this.validateAndFilterDescendants(node);
-    }
-
-    async runChildrenFunctionIfRequired(node) {
-        if (typeof node.children !== 'function') return;
-
+    if (typeof node.children === 'function') {
         try {
-            const nodeOrChildren = await node.children();
-            if (!nodeOrChildren) return;
-
-            let children;
-            if (Array.isArray(nodeOrChildren)) {
-                children = nodeOrChildren;
+            const result = await node.children();
+            if (!result) return;
+            if (Array.isArray(result)) {
+                node.children = structuredClone(result);
             } else {
-                children = nodeOrChildren.children;
-                ['name', 'value', 'short'].forEach((property) => {
-                    node[property] = nodeOrChildren[property];
-                });
+                node.children = structuredClone(result.children);
+                for (const prop of ['name', 'value', 'short']) {
+                    if (result[prop] !== undefined) node[prop] = result[prop];
+                }
                 node.isValid = undefined;
-
-                await this.addValidity(node);
-
-                // Don't filter based on validity; children can be handled by the
-                // callback itself if desired, and filtering out the node itself
-                // would be a poor experience in this scenario.
             }
-
-            node.children = structuredClone(children);
-        } catch (e) {// eslint-disable-line no-unused-vars
+        } catch {
             node.children = null;
+            return;
         }
     }
 
-    cloneAndNormaliseChildren(node) {
-        node.children = node.children.map((item) => ((typeof item !== 'object') ? { value: item } : item));
-    }
+    if (!node.children) return;
 
-    async validateAndFilterDescendants(node) {
-        for (let index = node.children.length - 1; index >= 0; index -= 1) {
-            const child = node.children[index];
-            child.parent = node;
-            await this.addValidity(child);
+    node.children = node.children.map((item) => (typeof item !== 'object' ? { value: item } : item));
 
-            if (this.opt.hideChildrenOfValid && child.isValid === true) {
-                child.children = null;
-            }
+    for (let i = node.children.length - 1; i >= 0; i--) {
+        const child = node.children[i];
+        child.parent = node;
 
-            if (this.opt.onlyShowValid && child.isValid !== true && !child.children) {
-                node.children.splice(index, 1);
-            }
-
-            if (child.open) {
-                await this.prepareChildren(child);
-            }
-        }
-    }
-
-    async addValidity(node) {
-        if (node.isValid !== undefined) return;
-
-        if (this.opt.validate) {
-            node.isValid = await this.opt.validate(this.valueFor(node), this.answers);
-        } else {
-            node.isValid = true;
-        }
-    }
-
-    render(error) {
-        let message = this.getQuestion();
-
-        if (this.firstRender) {
-            const hint = `Use arrow keys,${this.opt.multiple ? ' space to select,' : ''} enter to confirm.`;
-            message += colors.dim(`(${hint})`);
-        }
-
-        if (this.status === STATUS_ANSWERED) {
-            let answer;
-            if (this.opt.multiple) {
-                answer = this.selectedList.map((item) => this.shortFor(item, true)).join(', ');
+        if (child.isValid === undefined) {
+            if (config?.validate) {
+                child.isValid = await config.validate(valueFor(child));
             } else {
-                answer = this.shortFor(this.active, true);
+                child.isValid = true;
             }
-
-            message += colors.cyan(answer);
-        } else {
-            this.shownList = [];
-            const treeContent = `${this.createTreeContent()}${this.opt.loop !== false ? '----------------' : ''}`;
-            message += `\n${this.paginator.paginate(treeContent, this.shownList.indexOf(this.active), this.opt.pageSize)}`;
         }
 
-        this.firstRender = false;
-
-        const bottomContent = error ? `\n${colors.red('>> ')}${error}` : undefined;
-        this.screen.render(message, bottomContent);
-    }
-
-    createTreeContent(node = this.tree, indent = 2) {
-        const children = node.children || [];
-        let output = '';
-        const isFinal = this.status === STATUS_ANSWERED;
-
-        children.forEach((child) => {
-            this.shownList.push(child);
-            if (!this.active) this.active = child;
-
-            let prefix = child.children
-                ? child.open
-                    ? `${figures.arrowDown} `
-                    : `${figures.arrowRight} `
-                : child === this.active
-                    ? `${figures.pointer} `
-                    : '  ';
-
-            if (this.opt.multiple) {
-                prefix += `${this.selectedList.includes(child) ? figures.radioOn : figures.radioOff} `;
-            }
-
-            const showValue = `${' '.repeat(indent)}${prefix}${this.nameFor(child, isFinal)}\n`;
-            if (child === this.active) {
-                output += (child.isValid === true) ? colors.cyan(showValue) : colors.red(showValue);
-            } else {
-                output += showValue;
-            }
-
-            if (child.open) {
-                output += this.createTreeContent(child, indent + 2);
-            }
-        });
-
-        return output;
-    }
-
-    shortFor(node, isFinal = false) {
-        return node.short !== undefined ? node.short : this.nameFor(node, isFinal);
-    }
-
-    nameFor(node, isFinal = false) {
-        if (node.name !== undefined) return node.name;
-
-        if (this.opt.transformer) return this.opt.transformer(node.value, this.answers, { isFinal });
-
-        return node.value;
-    }
-
-    valueFor(node) {
-        return node.value !== undefined ? node.value : node.name;
-    }
-
-    onError(state) {
-        this.render(state.isValid);
-    }
-
-    onSubmit(state) {
-        this.status = STATUS_ANSWERED;
-        this.render();
-        this.screen.done();
-        cliCursor.show();
-        this.done(this.opt.multiple ? this.selectedList.map((item) => this.valueFor(item)) : state.value);
-    }
-
-    onUpKey() {
-        this.moveActive(-1);
-    }
-
-    onDownKey() {
-        this.moveActive(1);
-    }
-
-    onLeftKey() {
-        if (this.active.children && this.active.open) {
-            this.active.open = false;
-        } else if (this.active.parent !== this.tree) {
-            this.active = this.active.parent;
+        if (config?.hideChildrenOfValid && child.isValid === true) {
+            child.children = null;
+        }
+        if (config?.onlyShowValid && child.isValid !== true && !child.children) {
+            node.children.splice(i, 1);
+            continue;
         }
 
-        this.render();
+        if (child.open) {
+            await prepareNodeAsync(child, config);
+        }
+    }
+}
+
+function flattenTree(node, depth = 0) {
+    const result = [];
+    for (const child of node.children || []) {
+        child._depth = depth;
+        result.push(child);
+        if (child.open && child.children) {
+            result.push(...flattenTree(child, depth + 1));
+        }
+    }
+    return result;
+}
+
+function toggleSelection(node, selectedList) {
+    if (node.isValid !== true) return;
+    if (node.children?.length) return;
+
+    const idx = selectedList.current.indexOf(node);
+    if (idx === -1) {
+        if (!node.parent?.multiple && node.parent?.children) {
+            selectedList.current = selectedList.current.filter((elm) => elm.parent?.name !== node.parent?.name);
+        }
+        selectedList.current.push(node);
+    } else {
+        selectedList.current.splice(idx, 1);
+    }
+}
+
+export const treePrompt = createPrompt((config, done) => {
+    const { message, tree: treeInput, multiple = false, pageSize = 10, loop = true } = config;
+
+    const treeRoot = useRef(null);
+    const selectedList = useRef([]);
+    const showHint = useRef(true);
+    const activeRef = useRef(null);
+    const [status, setStatus] = useState('pending');
+    const [, setRenderKey] = useState(0);
+    const prefix = usePrefix({ status: status === 'answered' ? 'done' : 'idle' });
+
+    const rerender = () => setRenderKey(Date.now());
+
+    // Initialize tree on first render
+    if (treeRoot.current === null) {
+        const data = typeof treeInput === 'function' ? treeInput : structuredClone(treeInput);
+        treeRoot.current = { children: data };
+        prepareNode(treeRoot.current, config);
     }
 
-    onRightKey() {
-        if (!this.active.children) {
-            if (this.opt.multiple) {
-                this.toggleSelection();
+    const items = flattenTree(treeRoot.current);
+
+    if (activeRef.current === null && items.length > 0) {
+        activeRef.current = items[0];
+    }
+
+    let activeIndex = items.indexOf(activeRef.current);
+    if (activeIndex < 0 && items.length > 0) {
+        activeRef.current = items[0];
+        activeIndex = 0;
+    }
+
+    useKeypress(async (key) => {
+        if (status === 'answered' || items.length === 0) return;
+
+        const active = activeRef.current;
+
+        if (isEnterKey(key)) {
+            setStatus('answered');
+            if (multiple) {
+                done(selectedList.current.map(valueFor));
             } else {
-                this.toggleOpen();
+                done(valueFor(active));
             }
             return;
         }
 
-        if (!this.active.open) {
-            this.active.open = true;
-            this.prepareChildrenAndRender(this.active);
-        } else if (this.active.children.length) {
-            this.moveActive(1);
-        }
-    }
-
-    moveActive(distance = 0) {
-        const currentIndex = this.shownList.indexOf(this.active);
-        let index = currentIndex + distance;
-
-        if (index >= this.shownList.length) {
-            if (this.opt.loop === false) return;
-
-            index = 0;
-        } else if (index < 0) {
-            if (this.opt.loop === false) return;
-
-            index = this.shownList.length - 1;
+        if (isUpKey(key)) {
+            let idx = activeIndex - 1;
+            if (idx < 0) {
+                if (loop === false) return;
+                idx = items.length - 1;
+            }
+            activeRef.current = items[idx];
+            rerender();
+            return;
         }
 
-        this.active = this.shownList[index];
-        this.render();
-    }
-
-    onTabKey() {
-        this.toggleOpen();
-    }
-
-    onSpaceKey() {
-        if (this.opt.multiple) {
-            this.toggleSelection();
-        } else {
-            this.toggleOpen();
+        if (isDownKey(key)) {
+            let idx = activeIndex + 1;
+            if (idx >= items.length) {
+                if (loop === false) return;
+                idx = 0;
+            }
+            activeRef.current = items[idx];
+            rerender();
+            return;
         }
-    }
 
-    toggleSelection() {
-        if (this.active.isValid !== true) return;
-        if (this.active.children?.length) return;
+        if (key.name === 'left') {
+            if (active.children && active.open) {
+                active.open = false;
+            } else if (active.parent && active.parent !== treeRoot.current) {
+                activeRef.current = active.parent;
+            }
+            rerender();
+            return;
+        }
 
-        const selectedIndex = this.selectedList.indexOf(this.active);
-        if (selectedIndex === -1) {
-            // if !parent.multiple, remove all selected brothers before adding the active
-            if (!this.active.parent?.multiple && this.active.parent?.children) {
-                this.selectedList = this.selectedList.filter((elm) => elm.parent.name !== this.active.parent.name);
+        if (key.name === 'right') {
+            if (!active.children) {
+                if (multiple) {
+                    toggleSelection(active, selectedList);
+                    rerender();
+                }
+                return;
+            }
+            if (!active.open) {
+                active.open = true;
+                await prepareNodeAsync(active, config);
+                rerender();
+            } else if (active.children.length) {
+                activeRef.current = items[activeIndex + 1];
+                rerender();
+            }
+            return;
+        }
+
+        if (isSpaceKey(key)) {
+            if (multiple) {
+                toggleSelection(active, selectedList);
+            } else if (active.children) {
+                active.open = !active.open;
+                if (active.open) await prepareNodeAsync(active, config);
+            }
+            rerender();
+            return;
+        }
+
+        if (key.name === 'tab') {
+            if (active.children) {
+                active.open = !active.open;
+                if (active.open) await prepareNodeAsync(active, config);
+                rerender();
+            }
+        }
+    });
+
+    // Always call usePagination (hooks must be called unconditionally)
+    const page = usePagination({
+        items: items.length > 0 ? items : [{ _depth: 0, name: 'No items', isValid: true }],
+        active: activeIndex >= 0 ? activeIndex : 0,
+        renderItem({ item, isActive }) {
+            const indent = ' '.repeat((item._depth + 1) * 2);
+
+            let pfx = item.children
+                ? item.open
+                    ? `${figures.arrowDown} `
+                    : `${figures.arrowRight} `
+                : isActive
+                    ? `${figures.pointer} `
+                    : '  ';
+
+            if (multiple) {
+                pfx += `${selectedList.current.includes(item) ? figures.radioOn : figures.radioOff} `;
             }
 
-            this.selectedList.push(this.active);
+            const name = nameFor(item, config);
+            const line = `${indent}${pfx}${name}`;
+
+            if (isActive) {
+                return item.isValid === true ? colors.cyan(line) : colors.red(line);
+            }
+            return line;
+        },
+        pageSize,
+        loop: loop !== false,
+    });
+
+    if (status === 'answered') {
+        let answer;
+        if (multiple) {
+            answer = selectedList.current.map((n) => shortFor(n)).join(', ');
         } else {
-            this.selectedList.splice(selectedIndex, 1);
+            answer = activeRef.current ? shortFor(activeRef.current) : '';
         }
-
-        this.render();
+        return `${prefix} ${message} ${colors.cyan(answer)}`;
     }
 
-    toggleOpen() {
-        if (!this.active.children) return;
-
-        this.active.open = !this.active.open;
-        this.render();
+    let header = `${prefix} ${message}`;
+    if (showHint.current) {
+        showHint.current = false;
+        const hint = `Use arrow keys,${multiple ? ' space to select,' : ''} enter to confirm.`;
+        header += ` ${colors.dim(`(${hint})`)}`;
     }
-}
 
-export default TreePrompt;
+    const separator = loop !== false ? '\n----------------' : '';
+    return `${header}\n${page}${separator}`;
+});
+
+export default treePrompt;
