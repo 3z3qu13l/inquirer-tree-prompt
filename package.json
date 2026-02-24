@@ -1,6 +1,6 @@
 {
   "name": "inquirer-tree-prompt",
-  "version": "3.0.5",
+  "version": "4.0.0",
   "repository": {
     "type": "git",
     "url": "git@github.com:3z3qu13l/inquirer-tree-prompt.git"
@@ -16,19 +16,19 @@
   "type": "module",
   "description": "Inquirer tree prompt",
   "main": "index.js",
+  "exports": "./index.js",
   "license": "ISC",
   "dependencies": {
-    "cli-cursor": "5.0.0",
     "figures": "6.1.0",
-    "rxjs": "7.8.2",
     "yoctocolors": "2.1.2"
   },
   "peerDependencies": {
-    "inquirer": "^9.3.0"
+    "@inquirer/core": ">=10"
   },
   "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@inquirer/core": "10.1.13",
     "eslint": "10.0.0",
-    "globals": "17.3.0",
-    "inquirer": "9.3.8"
+    "globals": "17.3.0"
   }
 }
