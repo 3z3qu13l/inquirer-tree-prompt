@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@inquirer/core": "11.1.9",
+    "@inquirer/core": "11.1.10",
     "eslint": "10.4.0",
     "globals": "17.6.0"
   }
