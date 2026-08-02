@@ -1,209 +1,121 @@
-import { createPrompt, useState, useKeypress, usePagination, usePrefix, useRef, isEnterKey, isUpKey, isDownKey, isSpaceKey } from '@inquirer/core';
+import { createPrompt, useState, useEffect, useKeypress, usePagination, usePrefix, useRef, isEnterKey, isUpKey, isDownKey, isSpaceKey, isTabKey } from '@inquirer/core';
 import figures from 'figures';
 import colors from 'yoctocolors';
+import { createRoot, prepareNode, flattenTree, toggleSelection, isLeaf, valueFor, shortFor, nameFor } from './lib/tree.js';
 
-function valueFor(node) {
-    return node.value !== undefined ? node.value : node.name;
-}
-
-function shortFor(node) {
-    if (node.short !== undefined) return node.short;
-    if (node.name !== undefined) return node.name;
-    return node.value;
-}
-
-function nameFor(node, config) {
-    if (node.name !== undefined) return node.name;
-    if (config?.transformer) return config.transformer(node.value, {}, { isFinal: false });
-    return node.value;
-}
-
-// Synchronous tree preparation (handles static trees)
-function prepareNode(node, config) {
-    if (node.prepared) return;
-    node.prepared = true;
-
-    if (typeof node.children === 'function') return;
-    if (!node.children) return;
-
-    node.children = node.children.map((item) => (typeof item !== 'object' ? { value: item } : item));
-
-    for (let i = node.children.length - 1; i >= 0; i--) {
-        const child = node.children[i];
-        child.parent = node;
-
-        if (child.isValid === undefined) {
-            child.isValid = config?.validate ? undefined : true;
-        }
-
-        if (config?.hideChildrenOfValid && child.isValid === true) {
-            child.children = null;
-        }
-        if (config?.onlyShowValid && child.isValid !== true && !child.children) {
-            node.children.splice(i, 1);
-            continue;
-        }
-
-        if (child.open) {
-            prepareNode(child, config);
-        }
-    }
-}
-
-// Async tree preparation (for function children and async validate)
-async function prepareNodeAsync(node, config) {
-    if (node.prepared) return;
-    node.prepared = true;
-
-    if (typeof node.children === 'function') {
-        try {
-            const result = await node.children();
-            if (!result) return;
-            if (Array.isArray(result)) {
-                node.children = structuredClone(result);
-            } else {
-                node.children = structuredClone(result.children);
-                for (const prop of ['name', 'value', 'short']) {
-                    if (result[prop] !== undefined) node[prop] = result[prop];
-                }
-                node.isValid = undefined;
-            }
-        } catch {
-            node.children = null;
-            return;
-        }
-    }
-
-    if (!node.children) return;
-
-    node.children = node.children.map((item) => (typeof item !== 'object' ? { value: item } : item));
-
-    for (let i = node.children.length - 1; i >= 0; i--) {
-        const child = node.children[i];
-        child.parent = node;
-
-        if (child.isValid === undefined) {
-            if (config?.validate) {
-                child.isValid = await config.validate(valueFor(child));
-            } else {
-                child.isValid = true;
-            }
-        }
-
-        if (config?.hideChildrenOfValid && child.isValid === true) {
-            child.children = null;
-        }
-        if (config?.onlyShowValid && child.isValid !== true && !child.children) {
-            node.children.splice(i, 1);
-            continue;
-        }
-
-        if (child.open) {
-            await prepareNodeAsync(child, config);
-        }
-    }
-}
-
-function flattenTree(node, depth = 0) {
-    const result = [];
-    for (const child of node.children || []) {
-        child._depth = depth;
-        result.push(child);
-        if (child.open && child.children) {
-            result.push(...flattenTree(child, depth + 1));
-        }
-    }
-    return result;
-}
-
-function toggleSelection(node, selectedList) {
-    if (node.isValid !== true) return;
-    if (node.children?.length) return;
-
-    const idx = selectedList.current.indexOf(node);
-    if (idx === -1) {
-        if (!node.parent?.multiple && node.parent?.children) {
-            selectedList.current = selectedList.current.filter((elm) => elm.parent?.name !== node.parent?.name);
-        }
-        selectedList.current.push(node);
-    } else {
-        selectedList.current.splice(idx, 1);
-    }
-}
+const SEPARATOR = '----------------';
+const PLACEHOLDER = { raw: { name: 'No items' }, depth: 0, isValid: true, expandable: false };
 
 export const treePrompt = createPrompt((config, done) => {
-    const { message, tree: treeInput, multiple = false, pageSize = 10, loop = true } = config;
+    const { message, multiple = false, pageSize = 10, loop = true } = config;
 
-    const treeRoot = useRef(null);
-    const selectedList = useRef([]);
-    const showHint = useRef(true);
+    const rootRef = useRef(null);
+    const selection = useRef(new Set());
     const activeRef = useRef(null);
+    const showHint = useRef(true);
+    const renderCount = useRef(0);
+    const errorRef = useRef(null);
+    const rlRef = useRef(null);
     const [status, setStatus] = useState('pending');
+    const [loading, setLoading] = useState(true);
     const [, setRenderKey] = useState(0);
     const prefix = usePrefix({ status: status === 'answered' ? 'done' : 'idle' });
 
-    const rerender = () => setRenderKey(Date.now());
+    if (rootRef.current === null) rootRef.current = createRoot(config);
 
-    // Initialize tree on first render
-    if (treeRoot.current === null) {
-        const data = typeof treeInput === 'function' ? treeInput : structuredClone(treeInput);
-        treeRoot.current = { children: data };
-        prepareNode(treeRoot.current, config);
-    }
+    const rerender = () => setRenderKey(++renderCount.current);
 
-    const items = flattenTree(treeRoot.current);
+    // Keypress handlers and effects run outside the render, where a rejection
+    // would go unhandled: errors are rethrown on the next render instead, which
+    // rejects the prompt.
+    const fail = (error) => {
+        errorRef.current = error;
+        rerender();
+    };
 
-    if (activeRef.current === null && items.length > 0) {
-        activeRef.current = items[0];
-    }
+    // The root may be a function, and initially open nodes may have to be
+    // resolved, so the tree is always loaded asynchronously.
+    useEffect((rl) => {
+        // Kept to read the terminal height, which the page is capped to.
+        rlRef.current = rl;
+        prepareNode(rootRef.current, config).then(() => setLoading(false), fail);
+    }, []);
 
-    let activeIndex = items.indexOf(activeRef.current);
-    if (activeIndex < 0 && items.length > 0) {
-        activeRef.current = items[0];
-        activeIndex = 0;
-    }
+    const items = flattenTree(rootRef.current);
 
-    useKeypress(async (key) => {
-        if (status === 'answered' || items.length === 0) return;
+    if (!items.includes(activeRef.current)) activeRef.current = items[0] ?? null;
+    const activeIndex = Math.max(items.indexOf(activeRef.current), 0);
 
+    const finish = async (answer) => {
+        setStatus('answered');
+        done(config.filter ? await config.filter(answer) : answer);
+    };
+
+    const expand = async (node) => {
+        node.open = true;
+        if (node.prepared || node.loading) {
+            rerender();
+            return;
+        }
+        node.loading = true;
+        rerender();
+        try {
+            await prepareNode(node, config);
+        } finally {
+            node.loading = false;
+            rerender();
+        }
+    };
+
+    const handleKey = async (key) => {
+        if (status === 'answered' || loading) return;
+
+        // The list is rebuilt on every keypress: an expansion awaited in a
+        // previous keypress may have changed it since this render.
+        const list = flattenTree(rootRef.current);
         const active = activeRef.current;
 
         if (isEnterKey(key)) {
-            setStatus('answered');
             if (multiple) {
-                done(selectedList.current.map(valueFor));
-            } else {
-                done(valueFor(active));
+                await finish([...selection.current].map(valueFor));
+            } else if (active === null) {
+                // Nothing selectable (everything filtered out by onlyShowValid);
+                // resolve rather than trapping the user in the prompt.
+                await finish(undefined);
+            } else if (active.isValid === true) {
+                await finish(valueFor(active));
             }
             return;
         }
 
+        if (active === null) return;
+
         if (isUpKey(key)) {
-            let idx = activeIndex - 1;
-            if (idx < 0) {
+            let index = list.indexOf(active) - 1;
+            if (index < 0) {
                 if (loop === false) return;
-                idx = items.length - 1;
+                index = list.length - 1;
             }
-            activeRef.current = items[idx];
+            activeRef.current = list[index];
             rerender();
             return;
         }
 
         if (isDownKey(key)) {
-            let idx = activeIndex + 1;
-            if (idx >= items.length) {
+            let index = list.indexOf(active) + 1;
+            if (index >= list.length) {
                 if (loop === false) return;
-                idx = 0;
+                index = 0;
             }
-            activeRef.current = items[idx];
+            activeRef.current = list[index];
             rerender();
             return;
         }
 
         if (key.name === 'left') {
-            if (active.children && active.open) {
+            if (active.expandable && active.open) {
                 active.open = false;
-            } else if (active.parent && active.parent !== treeRoot.current) {
+            } else if (active.parent && active.parent !== rootRef.current) {
                 activeRef.current = active.parent;
             }
             rerender();
@@ -211,52 +123,73 @@ export const treePrompt = createPrompt((config, done) => {
         }
 
         if (key.name === 'right') {
-            if (!active.children) {
-                if (multiple) {
-                    toggleSelection(active, selectedList);
-                    rerender();
-                }
+            if (!active.expandable) {
+                if (multiple && toggleSelection(active, selection.current)) rerender();
                 return;
             }
             if (!active.open) {
-                active.open = true;
-                await prepareNodeAsync(active, config);
-                rerender();
-            } else if (active.children.length) {
-                activeRef.current = items[activeIndex + 1];
+                await expand(active);
+                return;
+            }
+            const next = list[list.indexOf(active) + 1];
+            if (next?.parent === active) {
+                activeRef.current = next;
                 rerender();
             }
             return;
         }
 
-        if (isSpaceKey(key)) {
-            if (multiple) {
-                toggleSelection(active, selectedList);
-            } else if (active.children) {
-                active.open = !active.open;
-                if (active.open) await prepareNodeAsync(active, config);
-            }
+        if (isSpaceKey(key) && multiple && isLeaf(active)) {
+            toggleSelection(active, selection.current);
             rerender();
             return;
         }
 
-        if (key.name === 'tab') {
-            if (active.children) {
-                active.open = !active.open;
-                if (active.open) await prepareNodeAsync(active, config);
+        if (isSpaceKey(key) || isTabKey(key)) {
+            if (!active.expandable) return;
+            if (active.open) {
+                active.open = false;
                 rerender();
+            } else {
+                await expand(active);
             }
+        }
+    };
+
+    useKeypress(async (key) => {
+        try {
+            await handleKey(key);
+        } catch (error) {
+            fail(error);
         }
     });
 
-    // Always call usePagination (hooks must be called unconditionally)
-    const page = usePagination({
-        items: items.length > 0 ? items : [{ _depth: 0, name: 'No items', isValid: true }],
-        active: activeIndex >= 0 ? activeIndex : 0,
-        renderItem({ item, isActive }) {
-            const indent = ' '.repeat((item._depth + 1) * 2);
+    let header = `${prefix} ${message}`;
+    if (showHint.current && !loading) {
+        showHint.current = false;
+        const hint = `Use arrow keys,${multiple ? ' space to select,' : ''} enter to confirm.`;
+        header += ` ${colors.dim(`(${hint})`)}`;
+    }
+    const separator = loop !== false ? `\n${SEPARATOR}` : '';
 
-            let pfx = item.children
+    // usePagination counts lines, not items, so a multi line item takes several
+    // rows off the page. Cap the page to what the terminal can display, keeping
+    // room for the header, the separator and the line the cursor rests on:
+    // otherwise the terminal scrolls and the active item ends up out of sight.
+    const rows = rlRef.current?.output?.rows;
+    const reserved = header.split('\n').length + (separator === '' ? 0 : 1) + 1;
+    const pageHeight = typeof rows === 'number' && rows > 0
+        ? Math.max(1, Math.min(pageSize, rows - reserved))
+        : pageSize;
+
+    // Hooks must be called unconditionally, hence the placeholder.
+    const page = usePagination({
+        items: items.length > 0 ? items : [PLACEHOLDER],
+        active: activeIndex,
+        renderItem({ item, isActive }) {
+            const indent = ' '.repeat((item.depth + 1) * 2);
+
+            let pfx = item.expandable
                 ? item.open
                     ? `${figures.arrowDown} `
                     : `${figures.arrowRight} `
@@ -265,39 +198,42 @@ export const treePrompt = createPrompt((config, done) => {
                     : '  ';
 
             if (multiple) {
-                pfx += `${selectedList.current.includes(item) ? figures.radioOn : figures.radioOff} `;
+                pfx += `${selection.current.has(item) ? figures.radioOn : figures.radioOff} `;
             }
 
-            const name = nameFor(item, config);
-            const line = `${indent}${pfx}${name}`;
+            // A name may span several lines; the extra ones are aligned under
+            // the first so they read as part of the same item.
+            const [head, ...rest] = String(nameFor(item, config)).split('\n');
+            let first = `${indent}${pfx}${head}`;
+            if (item.loading) first += ` ${colors.dim('…')}`;
+            if (item.error) first += ` ${colors.dim('(failed to load)')}`;
+
+            const continuation = ' '.repeat(indent.length + pfx.length);
+            const lines = [first, ...rest.map((line) => `${continuation}${line}`)];
 
             if (isActive) {
-                return item.isValid === true ? colors.cyan(line) : colors.red(line);
+                const paint = item.isValid === true ? colors.cyan : colors.red;
+                return lines.map((line) => paint(line)).join('\n');
             }
-            return line;
+            return lines.join('\n');
         },
-        pageSize,
+        pageSize: pageHeight,
         loop: loop !== false,
     });
 
+    // Rejects the prompt with errors raised by validate, filter or a children
+    // function outside of the render.
+    if (errorRef.current) throw errorRef.current;
+
     if (status === 'answered') {
-        let answer;
-        if (multiple) {
-            answer = selectedList.current.map((n) => shortFor(n)).join(', ');
-        } else {
-            answer = activeRef.current ? shortFor(activeRef.current) : '';
-        }
+        const answer = multiple
+            ? [...selection.current].map(shortFor).join(', ')
+            : activeRef.current ? shortFor(activeRef.current) : '';
         return `${prefix} ${message} ${colors.cyan(answer)}`;
     }
 
-    let header = `${prefix} ${message}`;
-    if (showHint.current) {
-        showHint.current = false;
-        const hint = `Use arrow keys,${multiple ? ' space to select,' : ''} enter to confirm.`;
-        header += ` ${colors.dim(`(${hint})`)}`;
-    }
+    if (loading) return `${header}\n  ${colors.dim('Loading…')}`;
 
-    const separator = loop !== false ? '\n----------------' : '';
     return `${header}\n${page}${separator}`;
 });
 

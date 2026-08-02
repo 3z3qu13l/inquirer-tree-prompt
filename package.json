@@ -6,12 +6,12 @@
     "url": "git@github.com:3z3qu13l/inquirer-tree-prompt.git"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=26"
   },
   "scripts": {
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
-    "test": "echo \"Error: no test\""
+    "test": "node --test \"test/**/*.test.js\""
   },
   "type": "module",
   "description": "Inquirer tree prompt",
