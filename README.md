@@ -31,7 +31,7 @@ Takes `message`, `tree`, [`filter`, `validate`, `transformer`, `pageSize`, `loop
 - `message`: (String) the question to display.
 
 - `tree`: (Array or Function) list of tree items, or an (optionally asynchronous) function returning them; items are strings or objects with:
-  - `name`: (String) to display in list; must provide this or `value`
+  - `name`: (String) to display in list; must provide this or `value`. It may span several lines: the extra lines are indented under the first one and count towards `pageSize`
   - `value`: (String) to put in answers hash; must provide this or `name`
   - `short`: (String) to display after selection
   - `open`: (Boolean) whether the item is expanded or collapsed
@@ -51,7 +51,7 @@ Takes `message`, `tree`, [`filter`, `validate`, `transformer`, `pageSize`, `loop
 
 - `multiple`: (Boolean) if true, will enable to select multiple items. Default: false.
 
-- `pageSize`: (Number) number of rows displayed at once. Default: 10.
+- `pageSize`: (Number) number of **rows** displayed at once. Default: 10. A name spanning several lines takes that many rows off the page, and the page is capped to the height of the terminal so the highlighted item always stays visible.
 
 - `loop`: (Boolean) if true, moving past the last item wraps around to the first. Default: true.
 

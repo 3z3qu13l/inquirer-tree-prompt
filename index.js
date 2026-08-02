@@ -15,6 +15,7 @@ export const treePrompt = createPrompt((config, done) => {
     const showHint = useRef(true);
     const renderCount = useRef(0);
     const errorRef = useRef(null);
+    const rlRef = useRef(null);
     const [status, setStatus] = useState('pending');
     const [loading, setLoading] = useState(true);
     const [, setRenderKey] = useState(0);
@@ -34,7 +35,9 @@ export const treePrompt = createPrompt((config, done) => {
 
     // The root may be a function, and initially open nodes may have to be
     // resolved, so the tree is always loaded asynchronously.
-    useEffect(() => {
+    useEffect((rl) => {
+        // Kept to read the terminal height, which the page is capped to.
+        rlRef.current = rl;
         prepareNode(rootRef.current, config).then(() => setLoading(false), fail);
     }, []);
 
@@ -161,6 +164,24 @@ export const treePrompt = createPrompt((config, done) => {
         }
     });
 
+    let header = `${prefix} ${message}`;
+    if (showHint.current && !loading) {
+        showHint.current = false;
+        const hint = `Use arrow keys,${multiple ? ' space to select,' : ''} enter to confirm.`;
+        header += ` ${colors.dim(`(${hint})`)}`;
+    }
+    const separator = loop !== false ? `\n${SEPARATOR}` : '';
+
+    // usePagination counts lines, not items, so a multi line item takes several
+    // rows off the page. Cap the page to what the terminal can display, keeping
+    // room for the header, the separator and the line the cursor rests on:
+    // otherwise the terminal scrolls and the active item ends up out of sight.
+    const rows = rlRef.current?.output?.rows;
+    const reserved = header.split('\n').length + (separator === '' ? 0 : 1) + 1;
+    const pageHeight = typeof rows === 'number' && rows > 0
+        ? Math.max(1, Math.min(pageSize, rows - reserved))
+        : pageSize;
+
     // Hooks must be called unconditionally, hence the placeholder.
     const page = usePagination({
         items: items.length > 0 ? items : [PLACEHOLDER],
@@ -180,16 +201,23 @@ export const treePrompt = createPrompt((config, done) => {
                 pfx += `${selection.current.has(item) ? figures.radioOn : figures.radioOff} `;
             }
 
-            let line = `${indent}${pfx}${nameFor(item, config)}`;
-            if (item.loading) line += ` ${colors.dim('…')}`;
-            if (item.error) line += ` ${colors.dim('(failed to load)')}`;
+            // A name may span several lines; the extra ones are aligned under
+            // the first so they read as part of the same item.
+            const [head, ...rest] = String(nameFor(item, config)).split('\n');
+            let first = `${indent}${pfx}${head}`;
+            if (item.loading) first += ` ${colors.dim('…')}`;
+            if (item.error) first += ` ${colors.dim('(failed to load)')}`;
+
+            const continuation = ' '.repeat(indent.length + pfx.length);
+            const lines = [first, ...rest.map((line) => `${continuation}${line}`)];
 
             if (isActive) {
-                return item.isValid === true ? colors.cyan(line) : colors.red(line);
+                const paint = item.isValid === true ? colors.cyan : colors.red;
+                return lines.map((line) => paint(line)).join('\n');
             }
-            return line;
+            return lines.join('\n');
         },
-        pageSize,
+        pageSize: pageHeight,
         loop: loop !== false,
     });
 
@@ -204,16 +232,8 @@ export const treePrompt = createPrompt((config, done) => {
         return `${prefix} ${message} ${colors.cyan(answer)}`;
     }
 
-    let header = `${prefix} ${message}`;
-    if (showHint.current && !loading) {
-        showHint.current = false;
-        const hint = `Use arrow keys,${multiple ? ' space to select,' : ''} enter to confirm.`;
-        header += ` ${colors.dim(`(${hint})`)}`;
-    }
-
     if (loading) return `${header}\n  ${colors.dim('Loading…')}`;
 
-    const separator = loop !== false ? `\n${SEPARATOR}` : '';
     return `${header}\n${page}${separator}`;
 });
 

@@ -2,10 +2,12 @@ import { PassThrough } from 'node:stream';
 import { stripVTControlCharacters } from 'node:util';
 import { treePrompt } from '../../index.js';
 
-/** ScreenManager reads `columns` off the output stream to wrap lines. */
 class Output extends PassThrough {
-    columns = 80;
-    rows = 30;
+    constructor({ columns = 80, rows = 30 } = {}) {
+        super();
+        this.columns = columns;
+        this.rows = rows;
+    }
 }
 
 export const keys = {
@@ -46,9 +48,9 @@ function clean(frame) {
  * Returns the answer promise, a `screen()` accessor returning the last rendered
  * frame without ANSI codes, and helpers to send keys.
  */
-export async function render(config) {
+export async function render(config, terminal) {
     const input = new PassThrough();
-    const output = new Output();
+    const output = new Output(terminal);
     const frames = [];
     output.on('data', (chunk) => frames.push(chunk.toString()));
 
@@ -83,6 +85,12 @@ export async function render(config) {
         answer,
         frames,
         screen,
+        rawScreen() {
+            for (let i = frames.length - 1; i >= 0; i--) {
+                if (clean(frames[i]) !== '') return frames[i];
+            }
+            return '';
+        },
         async press(...sequence) {
             for (const key of sequence) {
                 input.write(key);
