@@ -23,6 +23,15 @@ export function tick(ms = 10) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const QUIET = 15;
+const TIMEOUT = 5000;
+
+/** Waits until a predicate holds, rather than for an arbitrary delay. */
+async function until(predicate, timeout = TIMEOUT) {
+    const deadline = Date.now() + timeout;
+    while (!predicate() && Date.now() < deadline) await tick(5);
+}
+
 function clean(frame) {
     return stripVTControlCharacters(frame)
         .split('\n')
@@ -47,22 +56,37 @@ export async function render(config) {
     // Tests that never confirm would otherwise trigger an unhandled rejection.
     answer.catch(() => {});
 
-    await tick();
+    const screen = () => {
+        for (let i = frames.length - 1; i >= 0; i--) {
+            const frame = clean(frames[i]);
+            if (frame !== '') return frame;
+        }
+        return '';
+    };
+
+    // Waits for the rendering to stop changing: a single keypress may paint
+    // several frames, and a cold start may take a while on a slow machine.
+    const settle = async () => {
+        const deadline = Date.now() + TIMEOUT;
+        let previous = -1;
+        while (Date.now() < deadline) {
+            if (frames.length > 0 && frames.length === previous) return;
+            previous = frames.length;
+            await tick(QUIET);
+        }
+    };
+
+    await settle();
+    await until(() => !screen().includes('Loading…'));
 
     return {
         answer,
         frames,
-        screen() {
-            for (let i = frames.length - 1; i >= 0; i--) {
-                const frame = clean(frames[i]);
-                if (frame !== '') return frame;
-            }
-            return '';
-        },
+        screen,
         async press(...sequence) {
             for (const key of sequence) {
                 input.write(key);
-                await tick();
+                await settle();
             }
         },
         close() {
