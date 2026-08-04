@@ -106,7 +106,23 @@ const answer = await treePrompt({
 console.log(answer);
 ```
 
-See [`example/simple.js`](./example/simple.js) for a multiple selection example.
+### Examples
+The [`example`](./example) directory has one runnable script per option; each is a
+standalone prompt, run it with `node example/<file>.js`.
+
+| Example | Covers |
+| --- | --- |
+| [`items.js`](./example/items.js) | item properties: bare strings, `name`, `value`, `short`, `open`, multiline names |
+| [`tree.js`](./example/tree.js) | `tree` as an async function, lazy `children`, a `children` function replacing its own item, and one that fails |
+| [`validate.js`](./example/validate.js) | `validate`, and `isValid` to opt an item out of it |
+| [`onlyShowValid.js`](./example/onlyShowValid.js) | `onlyShowValid`: hide the items `validate` rejects |
+| [`hideChildrenOfValid.js`](./example/hideChildrenOfValid.js) | `hideChildrenOfValid`: make valid items leaves |
+| [`transformer.js`](./example/transformer.js) | `transformer`: display nameless values differently |
+| [`filter.js`](./example/filter.js) | `filter`, single and multiple selection, synchronous and asynchronous |
+| [`multiple.js`](./example/multiple.js) | `multiple` on the prompt and on individual items |
+| [`pageSize.js`](./example/pageSize.js) | `pageSize` counting rows rather than items |
+| [`loop.js`](./example/loop.js) | `loop: false` versus the default |
+| [`simple.js`](./example/simple.js) | a whole menu putting several options together |
 
 ### Development
 ```
