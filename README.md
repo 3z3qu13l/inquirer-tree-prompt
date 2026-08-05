@@ -7,17 +7,17 @@ Code base forked from [inquirer-tree-prompt](https://github.com/insightfuls/inqu
 
 ### Install
 ```
-npm install inquirer-tree-prompt
+npm install @3z3qu13l/inquirer-tree-prompt
 ```
 
-Requires Node.js >= 26 and `@inquirer/core` >= 10 as a peer dependency.
+Requires Node.js >= 22 and `@inquirer/core` >= 10 as a peer dependency.
 
 ### Usage
 The prompt is a standalone `@inquirer/core` prompt: call it directly and await
 the answer.
 
 ```js
-import { treePrompt } from 'inquirer-tree-prompt';
+import { treePrompt } from '@3z3qu13l/inquirer-tree-prompt';
 
 const answer = await treePrompt({
     message: 'Where is my phone?',
@@ -65,7 +65,7 @@ Takes `message`, `tree`, [`filter`, `validate`, `transformer`, `pageSize`, `loop
 
 ### Example
 ```js
-import { treePrompt } from 'inquirer-tree-prompt';
+import { treePrompt } from '@3z3qu13l/inquirer-tree-prompt';
 
 const answer = await treePrompt({
     message: 'Where is my phone?',

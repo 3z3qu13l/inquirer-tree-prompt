@@ -1,12 +1,31 @@
 {
-  "name": "inquirer-tree-prompt",
+  "name": "@3z3qu13l/inquirer-tree-prompt",
   "version": "4.0.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "git@github.com:3z3qu13l/inquirer-tree-prompt.git"
+    "url": "git+https://github.com/3z3qu13l/inquirer-tree-prompt.git"
   },
+  "homepage": "https://github.com/3z3qu13l/inquirer-tree-prompt#readme",
+  "bugs": "https://github.com/3z3qu13l/inquirer-tree-prompt/issues",
+  "author": "3z3qu13l (https://github.com/3z3qu13l)",
+  "keywords": [
+    "inquirer",
+    "inquirer-prompt",
+    "prompt",
+    "tree",
+    "cli",
+    "command-line",
+    "menu"
+  ],
+  "files": [
+    "index.js",
+    "lib"
+  ],
   "engines": {
-    "node": ">=26"
+    "node": ">=22"
   },
   "scripts": {
     "lint": "eslint .",
